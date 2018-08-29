@@ -1,8 +1,8 @@
 package beacon
 
 import (
-	"math"
-	"sort"
+	"fmt"
+	"plugin"
 	"sync"
 
 	dataBeacon "github.com/activecm/rita/datatypes/beacon"
@@ -24,6 +24,10 @@ type (
 	}
 )
 
+type MyFunction interface {
+	Greet(*BeaconAnalysisInput, int64, int64, int) *dataBeacon.BeaconAnalysisOutput
+}
+
 // newAnalyzer creates a new analyzer for computing beaconing scores.
 func newAnalyzer(connectionThreshold int, minTime, maxTime int64,
 	analyzedCallback func(*dataBeacon.AnalysisOutput), closedCallback func()) *analyzer {
@@ -33,173 +37,83 @@ func newAnalyzer(connectionThreshold int, minTime, maxTime int64,
 		maxTime:             maxTime,
 		analyzedCallback:    analyzedCallback,
 		closedCallback:      closedCallback,
-		analysisChannel:     make(chan *beaconAnalysisInput),
+		analysisChannel:     make(chan *BeaconAnalysisInput),
 	}
 }
 
 // analyze sends a group of timestamps and data sizes in for analysis.
 // Note: this function may block
-func (a *analyzer) analyze(data *beaconAnalysisInput) {
+func (a *analyzer) analyze(data *BeaconAnalysisInput) {
+	//	fmt.Println("analyzer.go : analyzeChannel <- data")
 	a.analysisChannel <- data
+
 }
 
 // close waits for the analysis threads to finish
 func (a *analyzer) close() {
+	//	fmt.Println("analyzer.go : close()")
 	close(a.analysisChannel)
 	a.analysisWg.Wait()
 	a.closedCallback()
+	//	fmt.Println("analyzer.go : close2")
+}
+
+func test(data *BeaconAnalysisInput, minTime int64, maxTime int64, thresh int) *dataBeacon.BeaconAnalysisOutput {
+	// fmt.Println(data)
+	var mod string
+	mod = "../RITA-Labs/beacons/beacons.so"
+
+	// load module
+	// 1. open the so file to load the symbols
+	plug, err := plugin.Open(mod)
+	if err != nil {
+		fmt.Println(err)
+		fmt.Println("1")
+	}
+
+	// 2. look up a symbol (an exported function or variable)
+	// in this case, variable Greeter
+	symGreeter, err := plug.Lookup("Greeter")
+	if err != nil {
+		fmt.Println(err)
+		fmt.Println("2")
+		// os.Exit(1)
+		return nil
+	}
+
+	// 3. Assert that loaded symbol is of a desired type
+	// in this case interface type Greeter (defined above)
+	var greeter MyFunction
+	greeter, ok := symGreeter.(MyFunction)
+	if !ok {
+		fmt.Println("unexpected type from module symbol")
+		// fmt.Println("3")
+		// os.Exit(1)
+		return nil
+	}
+
+	// 4. use the module
+	// fmt.Println(reflect.TypeOf(greeter.Greet(data)))
+	// fmt.Println(greeter.Greet(data, minTime, maxTime))
+	return (greeter.Greet(data, minTime, maxTime, thresh))
 }
 
 // start kicks off a new analysis thread
 func (a *analyzer) start() {
+	//	fmt.Println("analyzer.go : start()")
 	a.analysisWg.Add(1)
 	go func() {
+		//	fmt.Println("analyzer.go : go func")
+		// counter := 0
 		for data := range a.analysisChannel {
-			//sort the size and timestamps since they may have arrived out of order
-			sort.Sort(util.SortableInt64(data.ts))
-			sort.Sort(util.SortableInt64(data.origIPBytes))
+			output := test(data, a.minTime, a.maxTime, a.connectionThreshold)
 
-			//remove subsecond communications
-			//these will appear as beacons if we do not remove them
-			//subsecond beacon finding *may* be implemented later on...
-			data.ts = util.RemoveConsecutiveDuplicates(data.ts)
-
-			//If removing duplicates lowered the conn count under the threshold,
-			//remove this data from the analysis
-			if len(data.ts) < a.connectionThreshold {
-				continue
+			// This adds the analyzed result to the writer channel, which writes that
+			// individual result to the database collection
+			if output != nil {
+				a.analyzedCallback(output)
 			}
-
-			//store the diff slice length since we use it a lot
-			//for timestamps this is one less then the data slice length
-			//since we are calculating the times in between readings
-			tsLength := len(data.ts) - 1
-			dsLength := len(data.origIPBytes)
-
-			//find the duration of this connection
-			//perfect beacons should fill the observation period
-			duration := float64(data.ts[tsLength]-data.ts[0]) /
-				float64(a.maxTime-a.minTime)
-
-			//find the delta times between the timestamps
-			diff := make([]int64, tsLength)
-			for i := 0; i < tsLength; i++ {
-				diff[i] = data.ts[i+1] - data.ts[i]
-			}
-
-			//perfect beacons should have symmetric delta time and size distributions
-			//Bowley's measure of skew is used to check symmetry
-			sort.Sort(util.SortableInt64(diff))
-			tsSkew := float64(0)
-			dsSkew := float64(0)
-
-			//tsLength -1 is used since diff is a zero based slice
-			tsLow := diff[util.Round(.25*float64(tsLength-1))]
-			tsMid := diff[util.Round(.5*float64(tsLength-1))]
-			tsHigh := diff[util.Round(.75*float64(tsLength-1))]
-			tsBowleyNum := tsLow + tsHigh - 2*tsMid
-			tsBowleyDen := tsHigh - tsLow
-
-			//we do the same for datasizes
-			dsLow := data.origIPBytes[util.Round(.25*float64(dsLength-1))]
-			dsMid := data.origIPBytes[util.Round(.5*float64(dsLength-1))]
-			dsHigh := data.origIPBytes[util.Round(.75*float64(dsLength-1))]
-			dsBowleyNum := dsLow + dsHigh - 2*dsMid
-			dsBowleyDen := dsHigh - dsLow
-
-			//tsSkew should equal zero if the denominator equals zero
-			//bowley skew is unreliable if Q2 = Q1 or Q2 = Q3
-			if tsBowleyDen != 0 && tsMid != tsLow && tsMid != tsHigh {
-				tsSkew = float64(tsBowleyNum) / float64(tsBowleyDen)
-			}
-
-			if dsBowleyDen != 0 && dsMid != dsLow && dsMid != dsHigh {
-				dsSkew = float64(dsBowleyNum) / float64(dsBowleyDen)
-			}
-
-			//perfect beacons should have very low dispersion around the
-			//median of their delta times
-			//Median Absolute Deviation About the Median
-			//is used to check dispersion
-			devs := make([]int64, tsLength)
-			for i := 0; i < tsLength; i++ {
-				devs[i] = util.Abs(diff[i] - tsMid)
-			}
-
-			dsDevs := make([]int64, dsLength)
-			for i := 0; i < dsLength; i++ {
-				dsDevs[i] = util.Abs(data.origIPBytes[i] - dsMid)
-			}
-
-			sort.Sort(util.SortableInt64(devs))
-			sort.Sort(util.SortableInt64(dsDevs))
-
-			tsMadm := devs[util.Round(.5*float64(tsLength-1))]
-			dsMadm := dsDevs[util.Round(.5*float64(dsLength-1))]
-
-			//Store the range for human analysis
-			tsIntervalRange := diff[tsLength-1] - diff[0]
-			dsRange := data.origIPBytes[dsLength-1] - data.origIPBytes[0]
-
-			//get a list of the intervals found in the data,
-			//the number of times the interval was found,
-			//and the most occurring interval
-			intervals, intervalCounts, tsMode, tsModeCount := createCountMap(diff)
-			dsSizes, dsCounts, dsMode, dsModeCount := createCountMap(data.origIPBytes)
-
-			//more skewed distributions receive a lower score
-			//less skewed distributions receive a higher score
-			tsSkewScore := 1.0 - math.Abs(tsSkew) //smush tsSkew
-			dsSkewScore := 1.0 - math.Abs(dsSkew) //smush dsSkew
-
-			//lower dispersion is better, cutoff dispersion scores at 30 seconds
-			tsMadmScore := 1.0 - float64(tsMadm)/30.0
-			if tsMadmScore < 0 {
-				tsMadmScore = 0
-			}
-
-			//lower dispersion is better, cutoff dispersion scores at 32 bytes
-			dsMadmScore := 1.0 - float64(dsMadm)/32.0
-			if dsMadmScore < 0 {
-				dsMadmScore = 0
-			}
-
-			tsDurationScore := duration
-
-			//smaller data sizes receive a higher score
-			dsSmallnessScore := 1.0 - float64(dsMode)/65535.0
-			if dsSmallnessScore < 0 {
-				dsSmallnessScore = 0
-			}
-
-			output := &dataBeacon.AnalysisOutput{
-				UconnID:          data.uconnID,
-				TSISkew:          tsSkew,
-				TSIDispersion:    tsMadm,
-				TSDuration:       duration,
-				TSIRange:         tsIntervalRange,
-				TSIMode:          tsMode,
-				TSIModeCount:     tsModeCount,
-				TSIntervals:      intervals,
-				TSIntervalCounts: intervalCounts,
-				DSSkew:           dsSkew,
-				DSDispersion:     dsMadm,
-				DSRange:          dsRange,
-				DSSizes:          dsSizes,
-				DSSizeCounts:     dsCounts,
-				DSMode:           dsMode,
-				DSModeCount:      dsModeCount,
-			}
-
-			//score numerators
-			tsSum := tsSkewScore + tsMadmScore + tsDurationScore
-			dsSum := dsSkewScore + dsMadmScore + dsSmallnessScore
-
-			//score averages
-			output.TSScore = tsSum / 3.0
-			output.DSScore = dsSum / 3.0
-			output.Score = (tsSum + dsSum) / 6.0
-			a.analyzedCallback(output)
+			// counter++
 		}
 		a.analysisWg.Done()
 	}()
@@ -208,6 +122,7 @@ func (a *analyzer) start() {
 // createCountMap returns a distinct data array, data count array, the mode,
 // and the number of times the mode occured
 func createCountMap(sortedIn []int64) ([]int64, []int64, int64, int64) {
+	//	fmt.Println("analyzer.go : create count map")
 	//Since the data is already sorted, we can call this without fear
 	distinct, countsMap := util.CountAndRemoveConsecutiveDuplicates(sortedIn)
 	countsArr := make([]int64, len(distinct))

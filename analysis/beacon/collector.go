@@ -17,18 +17,19 @@ type (
 		db                  *database.DB               // provides access to MongoDB
 		conf                *config.Config             // contains details needed to access MongoDB
 		connectionThreshold int                        // the minimum number of connections to be considered a beacon
-		collectedCallback   func(*beaconAnalysisInput) // called on each collected set of connections
+		collectedCallback   func(*BeaconAnalysisInput) // called on each collected set of connections
 		closedCallback      func()                     // called when .close() is called and no more calls to collectedCallback will be made
 		collectChannel      chan string                // holds ip addresses
 		collectWg           sync.WaitGroup             // wait for collection to finish
 	}
 )
 
-// newCollector creates a new collector for creating beaconAnalysisInput objects
+// newCollector creates a new collector for creating BeaconAnalysisInput objects
 // which group the given source, a detected destination, and all of their
 // connection analysis details (timestamps, data sizes, etc.)
 func newCollector(db *database.DB, conf *config.Config, connectionThreshold int,
-	collectedCallback func(*beaconAnalysisInput), closedCallback func()) *collector {
+	collectedCallback func(*BeaconAnalysisInput), closedCallback func()) *collector {
+	//	fmt.Println("collector.go : new()")
 	return &collector{
 		db:                  db,
 		conf:                conf,
@@ -42,18 +43,22 @@ func newCollector(db *database.DB, conf *config.Config, connectionThreshold int,
 // collect queues a host for collection
 // Note: this function may block
 func (c *collector) collect(srcHost string) {
+	//	fmt.Println("collector.go : collect <- src")
 	c.collectChannel <- srcHost
 }
 
 // close waits for the collection threads to finish
 func (c *collector) close() {
+	//	fmt.Println("collector.go : close()")
 	close(c.collectChannel)
 	c.collectWg.Wait()
 	c.closedCallback()
+	//	fmt.Println("collector.go : close2")
 }
 
 // start kicks off a new collection thread
 func (c *collector) start() {
+	//	fmt.Println("collector.go : start()")
 	c.collectWg.Add(1)
 	go func() {
 		session := c.db.Session.Copy()
@@ -73,8 +78,8 @@ func (c *collector) start() {
 				}
 
 				//create our new input
-				newInput := &beaconAnalysisInput{
-					uconnID: uconn.ID,
+				newInput := &BeaconAnalysisInput{
+					UconnID: uconn.ID,
 					src:     uconn.Src,
 					dst:     uconn.Dst,
 				}
@@ -93,13 +98,13 @@ func (c *collector) start() {
 						continue
 					}
 
-					newInput.ts = append(newInput.ts, conn.Ts)
-					newInput.origIPBytes = append(newInput.origIPBytes, conn.OriginIPBytes)
+					newInput.Ts = append(newInput.Ts, conn.Ts)
+					newInput.OrigIPBytes = append(newInput.OrigIPBytes, conn.OriginIPBytes)
 				}
 
 				//filtering may have reduced the amount of connections
 				//check again if we should skip this unique connection
-				if len(newInput.ts) < c.connectionThreshold {
+				if len(newInput.Ts) < c.connectionThreshold {
 					continue
 				}
 

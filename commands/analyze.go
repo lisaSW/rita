@@ -172,7 +172,13 @@ func logAnalysisFunc(analysisName string, databaseName string,
 		"start_time": start.Format(util.TimeFormat),
 	}).Infof("Running analysis")
 	fmt.Println("\t[-] Running " + analysisName)
+
+	// fmt.Println("start")
+	// fmt.Println(*resources)
+
 	analysis(resources)
+	// fmt.Println("end")
+
 	end := time.Now()
 	resources.Log.WithFields(log.Fields{
 		"analysis": analysisName,

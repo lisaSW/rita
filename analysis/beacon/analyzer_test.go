@@ -24,11 +24,11 @@ func TestAnalyzer(t *testing.T) {
 			},
 		)
 		analyzer.start()
-		analyzer.analyze(&beaconAnalysisInput{
+		analyzer.analyze(&BeaconAnalysisInput{
 			src:         "0.0.0.0",
 			dst:         "0.0.0.0",
-			ts:          val.ts, //these are the timestamps
-			origIPBytes: val.ds, //these are the data sizes
+			Ts:          val.ts, //these are the timestamps
+			OrigIPBytes: val.ds, //these are the data sizes
 		})
 		analyzer.close()
 

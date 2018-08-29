@@ -17,13 +17,13 @@ func TestCollector(t *testing.T) {
 	setUpCollectorTest(t, res)
 	defer tearDownCollectorConnRecords(t, res)
 
-	var collectedChannel chan *beaconAnalysisInput
+	var collectedChannel chan *BeaconAnalysisInput
 
 	collect := func(srcHost string) {
-		collectedChannel = make(chan *beaconAnalysisInput, 2)
+		collectedChannel = make(chan *BeaconAnalysisInput, 2)
 		collector := newCollector(
 			res.DB, res.Config, res.Config.S.Beacon.DefaultConnectionThresh,
-			func(collected *beaconAnalysisInput) {
+			func(collected *BeaconAnalysisInput) {
 				collectedChannel <- collected
 			},
 			func() {
@@ -77,12 +77,12 @@ func TestCollector(t *testing.T) {
 
 }
 
-func collectionSuccessful(t *testing.T, collectorTestData *collectorTestData, collectedData *beaconAnalysisInput) {
+func collectionSuccessful(t *testing.T, collectorTestData *collectorTestData, collectedData *BeaconAnalysisInput) {
 	require.Equal(t, collectorTestData.src, collectedData.src)
 	require.Equal(t, collectorTestData.dst, collectedData.dst)
 	for i := range collectorTestData.ts {
-		require.Equal(t, collectorTestData.ts[i], collectedData.ts[i])
-		require.Equal(t, collectorTestData.ds[i], collectedData.origIPBytes[i])
+		require.Equal(t, collectorTestData.ts[i], collectedData.Ts[i])
+		require.Equal(t, collectorTestData.ds[i], collectedData.OrigIPBytes[i])
 	}
 }
 

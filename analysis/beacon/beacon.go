@@ -1,7 +1,6 @@
 package beacon
 
 import (
-	"runtime"
 	"time"
 
 	mgo "github.com/globalsign/mgo"
@@ -18,12 +17,12 @@ import (
 
 type (
 	//beaconAnalysisInput binds a src, dst pair with their analysis data
-	beaconAnalysisInput struct {
+	BeaconAnalysisInput struct {
 		src         string        // Source IP
 		dst         string        // Destination IP
-		uconnID     bson.ObjectId // Unique Connection ID
-		ts          []int64       // Connection timestamps for this src, dst pair
-		origIPBytes []int64       // Src to dst connection sizes for each connection
+		UconnID     bson.ObjectId // Unique Connection ID
+		Ts          []int64       // Connection timestamps for this src, dst pair
+		OrigIPBytes []int64       // Src to dst connection sizes for each connection
 	}
 )
 
@@ -31,6 +30,7 @@ type (
 // and performs statistical analysis searching for command and control
 // beacons.
 func BuildBeaconCollection(res *resources.Resources) {
+	//	fmt.Println("beacon.go : build collection")
 	// create the actual collection
 	collectionName := res.Config.T.Beacon.BeaconTable
 	collectionKeys := []mgo.Index{
@@ -51,7 +51,8 @@ func BuildBeaconCollection(res *resources.Resources) {
 		thresh = 5
 	}
 
-	//Find the observation period
+	//Find the observation period (returns the min and max timestamps for
+	// for all connections)
 	minTime, maxTime := findAnalysisPeriod(
 		res.DB,
 		res.Config.T.Structure.ConnTable,
@@ -59,18 +60,25 @@ func BuildBeaconCollection(res *resources.Resources) {
 	)
 
 	//Create the workers
+
+	// writer.go
 	writerWorker := newWriter(res.DB, res.Config)
+
+	// analyzer.go
 	analyzerWorker := newAnalyzer(
 		thresh, minTime, maxTime,
 		writerWorker.write, writerWorker.close,
 	)
+
+	// collector.go
 	collectorWorker := newCollector(
 		res.DB, res.Config, thresh,
 		analyzerWorker.analyze, analyzerWorker.close,
 	)
 
 	//kick off the threaded goroutines
-	for i := 0; i < util.Max(1, runtime.NumCPU()/2); i++ {
+	for i := 0; i < util.Max(1, 1); i++ {
+		// for i := 0; i < util.Max(1, runtime.NumCPU()/2); i++ {
 		collectorWorker.start()
 		analyzerWorker.start()
 		writerWorker.start()
@@ -94,6 +102,11 @@ func BuildBeaconCollection(res *resources.Resources) {
 
 func findAnalysisPeriod(db *database.DB, connCollection string,
 	logger *log.Logger) (int64, int64) {
+
+	//	fmt.Println("beacon.go : find analysis period")
+	//	fmt.Println(" -- ", db)
+	//	fmt.Println(" -- ", connCollection)
+
 	session := db.Session.Copy()
 	defer session.Close()
 
@@ -129,6 +142,7 @@ func findAnalysisPeriod(db *database.DB, connCollection string,
 //GetBeaconResultsView finds beacons greater than a given cutoffScore
 //and links the data from the unique connections table back in to the results
 func GetBeaconResultsView(res *resources.Resources, ssn *mgo.Session, cutoffScore float64) *mgo.Iter {
+	//	fmt.Println("beacon.go : get results view")
 	pipeline := getViewPipeline(res, cutoffScore)
 	return res.DB.AggregateCollection(res.Config.T.Beacon.BeaconTable, ssn, pipeline)
 }
@@ -139,6 +153,7 @@ func GetBeaconResultsView(res *resources.Resources, ssn *mgo.Session, cutoffScor
 // beaconing collection. Setting cuttoff to 1 will prevent the aggregation from
 // returning any records.
 func getViewPipeline(res *resources.Resources, cuttoff float64) []bson.D {
+	//	fmt.Println("get view pipeline")
 	return []bson.D{
 		{
 			{"$match", bson.D{
