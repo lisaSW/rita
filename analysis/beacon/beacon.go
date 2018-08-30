@@ -8,7 +8,6 @@ import (
 
 	"github.com/activecm/rita/database"
 	"github.com/activecm/rita/datatypes/data"
-	"github.com/activecm/rita/datatypes/structure"
 	"github.com/activecm/rita/resources"
 
 	log "github.com/sirupsen/logrus"
@@ -29,7 +28,7 @@ type (
 // and performs statistical analysis searching for command and control
 // beacons.
 func BuildBeaconCollection(res *resources.Resources) {
-	//	fmt.Println("beacon.go : build collection")
+
 	// create the actual collection
 	collectionName := res.Config.T.Beacon.BeaconTable
 	collectionKeys := []mgo.Index{
@@ -58,64 +57,16 @@ func BuildBeaconCollection(res *resources.Resources) {
 		res.Log,
 	)
 
-	//Create the workers
-
-	// writer.go
-	// writerWorker := newWriter(res.DB, res.Config)
-	//
-	// // analyzer.go
-	// analyzerWorker := newAnalyzer(
-	// 	thresh, minTime, maxTime,
-	// 	writerWorker.write, writerWorker.close,
-	// )
-
-	// collector.go
-	// collectorWorker := newCollector(
-	// 	res.DB, res.Config, thresh,
-	// 	analyzerWorker.analyze, analyzerWorker.close,
-	// )
-
-	//kick off the threaded goroutines
-	// for i := 0; i < util.Max(1, 1); i++ {
-	// 	// for i := 0; i < util.Max(1, runtime.NumCPU()/2); i++ {
-	// 	collectorWorker.start()
-	// 	analyzerWorker.start()
-	// 	writerWorker.start()
-	// }
-
-	// Feed local addresses to the collector
-	session := res.DB.Session.Copy()
-	var host structure.Host
-	localIter := session.DB(res.DB.GetSelectedDB()).
-		C(res.Config.T.Structure.HostTable).
-		Find(bson.M{"local": true}).Iter()
-
-	var hostList []string
-	for localIter.Next(&host) {
-		hostList = append(hostList, host.IP)
-		// collectorWorker.collect(host.IP)
-
-	}
-
-	tempy := collector_start(res.DB, res.Config, thresh, hostList)
+	tempy := collector_start(res.DB, res.Config, thresh)
 
 	outputChunk := analyzer_start(tempy, minTime, maxTime, thresh)
 
-	// fmt.Println(outputChunk)
 	writer_start(outputChunk, res.DB, res.Config)
 
-	session.Close()
-
-	// Wait for things to finish
-	// collectorWorker.close()
 }
 
 func findAnalysisPeriod(db *database.DB, connCollection string,
 	logger *log.Logger) (int64, int64) {
-
-	//	fmt.Println("beacon.go : find analysis period")
-	//	fmt.Println(" -- ", db)
-	//	fmt.Println(" -- ", connCollection)
 
 	session := db.Session.Copy()
 	defer session.Close()
@@ -152,7 +103,6 @@ func findAnalysisPeriod(db *database.DB, connCollection string,
 //GetBeaconResultsView finds beacons greater than a given cutoffScore
 //and links the data from the unique connections table back in to the results
 func GetBeaconResultsView(res *resources.Resources, ssn *mgo.Session, cutoffScore float64) *mgo.Iter {
-	//	fmt.Println("beacon.go : get results view")
 	pipeline := getViewPipeline(res, cutoffScore)
 	return res.DB.AggregateCollection(res.Config.T.Beacon.BeaconTable, ssn, pipeline)
 }
@@ -163,7 +113,6 @@ func GetBeaconResultsView(res *resources.Resources, ssn *mgo.Session, cutoffScor
 // beaconing collection. Setting cuttoff to 1 will prevent the aggregation from
 // returning any records.
 func getViewPipeline(res *resources.Resources, cuttoff float64) []bson.D {
-	//	fmt.Println("get view pipeline")
 	return []bson.D{
 		{
 			{"$match", bson.D{
