@@ -1,6 +1,7 @@
 package beacon
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/activecm/rita/config"
@@ -44,22 +45,22 @@ func (w *writer) close() {
 }
 
 // start kicks off a new write thread
-func (w *writer) start() {
-	//	fmt.Println("writer.go : start()")
-	w.writeWg.Add(1)
-	go func() {
-		//	fmt.Println("writer.go : go func")
-		ssn := w.db.Session.Copy()
-		defer ssn.Close()
+func writer_start(output []*dataBeacon.BeaconAnalysisOutput, resDB *database.DB, resConf *config.Config) {
+	fmt.Println("writer.go : start()")
+	// w.writeWg.Add(1)
+	// go func() {
+	//	fmt.Println("writer.go : go func")
+	ssn := resDB.Session.Copy()
+	defer ssn.Close()
 
-		counter := 0
-		//TODO: Implement bulk writes
-		for data := range w.writeChannel {
-			//	fmt.Println("writer.go ", counter, " : ")
-			//	fmt.Println("--", data)
-			ssn.DB(w.db.GetSelectedDB()).C(w.conf.T.Beacon.BeaconTable).Insert(data)
-			counter++
-		}
-		w.writeWg.Done()
-	}()
+	counter := 0
+	//TODO: Implement bulk writes
+	for _, data := range output {
+		fmt.Println("writer.go ", counter, " : ")
+		fmt.Println("--", data)
+		ssn.DB(resDB.GetSelectedDB()).C(resConf.T.Beacon.BeaconTable).Insert(data)
+		counter++
+	}
+	// w.writeWg.Done()
+	// }()
 }

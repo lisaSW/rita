@@ -99,24 +99,30 @@ func test(data *BeaconAnalysisInput, minTime int64, maxTime int64, thresh int) *
 }
 
 // start kicks off a new analysis thread
-func (a *analyzer) start() {
-	//	fmt.Println("analyzer.go : start()")
-	a.analysisWg.Add(1)
-	go func() {
-		//	fmt.Println("analyzer.go : go func")
-		// counter := 0
-		for data := range a.analysisChannel {
-			output := test(data, a.minTime, a.maxTime, a.connectionThreshold)
+func analyzer_start(dataChunk []*BeaconAnalysisInput, minTime int64, maxTime int64, thresh int) []*dataBeacon.BeaconAnalysisOutput {
+	fmt.Println("analyzer.go : start()")
+	// a.analysisWg.Add(1)
+	var outputChunk []*dataBeacon.BeaconAnalysisOutput
+	// go func() {
+	//	fmt.Println("analyzer.go : go func")
+	// counter := 0
+	for _, data := range dataChunk {
+		// fmt.Println(data)
+		output := test(data, minTime, maxTime, thresh)
 
-			// This adds the analyzed result to the writer channel, which writes that
-			// individual result to the database collection
-			if output != nil {
-				a.analyzedCallback(output)
-			}
-			// counter++
+		// This adds the analyzed result to the writer channel, which writes that
+		// individual result to the database collection
+		if output != nil {
+			// a.analyzedCallback(output)
+
+			outputChunk = append(outputChunk, output)
 		}
-		a.analysisWg.Done()
-	}()
+		// counter++
+	}
+	// a.analysisWg.Done()
+	// }()
+	// fmt.Println(outputChunk)
+	return outputChunk
 }
 
 // createCountMap returns a distinct data array, data count array, the mode,

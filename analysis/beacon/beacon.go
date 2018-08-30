@@ -10,7 +10,6 @@ import (
 	"github.com/activecm/rita/datatypes/data"
 	"github.com/activecm/rita/datatypes/structure"
 	"github.com/activecm/rita/resources"
-	"github.com/activecm/rita/util"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -62,27 +61,27 @@ func BuildBeaconCollection(res *resources.Resources) {
 	//Create the workers
 
 	// writer.go
-	writerWorker := newWriter(res.DB, res.Config)
-
-	// analyzer.go
-	analyzerWorker := newAnalyzer(
-		thresh, minTime, maxTime,
-		writerWorker.write, writerWorker.close,
-	)
+	// writerWorker := newWriter(res.DB, res.Config)
+	//
+	// // analyzer.go
+	// analyzerWorker := newAnalyzer(
+	// 	thresh, minTime, maxTime,
+	// 	writerWorker.write, writerWorker.close,
+	// )
 
 	// collector.go
-	collectorWorker := newCollector(
-		res.DB, res.Config, thresh,
-		analyzerWorker.analyze, analyzerWorker.close,
-	)
+	// collectorWorker := newCollector(
+	// 	res.DB, res.Config, thresh,
+	// 	analyzerWorker.analyze, analyzerWorker.close,
+	// )
 
 	//kick off the threaded goroutines
-	for i := 0; i < util.Max(1, 1); i++ {
-		// for i := 0; i < util.Max(1, runtime.NumCPU()/2); i++ {
-		collectorWorker.start()
-		analyzerWorker.start()
-		writerWorker.start()
-	}
+	// for i := 0; i < util.Max(1, 1); i++ {
+	// 	// for i := 0; i < util.Max(1, runtime.NumCPU()/2); i++ {
+	// 	collectorWorker.start()
+	// 	analyzerWorker.start()
+	// 	writerWorker.start()
+	// }
 
 	// Feed local addresses to the collector
 	session := res.DB.Session.Copy()
@@ -91,13 +90,24 @@ func BuildBeaconCollection(res *resources.Resources) {
 		C(res.Config.T.Structure.HostTable).
 		Find(bson.M{"local": true}).Iter()
 
+	var hostList []string
 	for localIter.Next(&host) {
-		collectorWorker.collect(host.IP)
+		hostList = append(hostList, host.IP)
+		// collectorWorker.collect(host.IP)
+
 	}
+
+	tempy := collector_start(res.DB, res.Config, thresh, hostList)
+
+	outputChunk := analyzer_start(tempy, minTime, maxTime, thresh)
+
+	// fmt.Println(outputChunk)
+	writer_start(outputChunk, res.DB, res.Config)
+
 	session.Close()
 
 	// Wait for things to finish
-	collectorWorker.close()
+	// collectorWorker.close()
 }
 
 func findAnalysisPeriod(db *database.DB, connCollection string,
