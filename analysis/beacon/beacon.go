@@ -1,6 +1,7 @@
 package beacon
 
 import (
+	"fmt"
 	"runtime"
 	"time"
 
@@ -90,6 +91,13 @@ func BuildBeaconCollection(res *resources.Resources) {
 
 	// Wait for things to finish
 	collectorWorker.close()
+
+	beaconCount, _ := res.DB.Session.DB(res.DB.GetSelectedDB()).
+		C(res.Config.T.Beacon.BeaconTable).
+		Find(bson.M{}).
+		Count()
+
+	fmt.Println("wrote: ", beaconCount)
 }
 
 func findAnalysisPeriod(db *database.DB, connCollection string,

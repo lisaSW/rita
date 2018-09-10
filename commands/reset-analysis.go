@@ -37,9 +37,10 @@ func init() {
 func resetAnalysis(database string, res *resources.Resources) error {
 	//clean database
 
-	conn := res.Config.T.Structure.ConnTable
-	http := res.Config.T.Structure.HTTPTable
-	dns := res.Config.T.Structure.DNSTable
+	// conn := res.Config.T.Structure.ConnTable
+	// http := res.Config.T.Structure.HTTPTable
+	// dns := res.Config.T.Structure.DNSTable
+	beacon := res.Config.T.Beacon.BeaconTable
 
 	names, err := res.DB.Session.DB(database).CollectionNames()
 	if err != nil || len(names) == 0 {
@@ -65,14 +66,14 @@ func resetAnalysis(database string, res *resources.Resources) error {
 	var err2Flag error
 	for _, name := range names {
 		switch name {
-		case conn, http, dns:
-			continue
-		default:
+		case beacon:
 			err2 := res.DB.Session.DB(database).C(name).DropCollection()
 			if err2 != nil {
 				fmt.Fprintf(os.Stderr, "Failed to drop collection: %s\n", err2.Error())
 				err2Flag = err2
 			}
+		default:
+			continue
 		}
 	}
 

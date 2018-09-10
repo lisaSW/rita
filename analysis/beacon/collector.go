@@ -89,9 +89,9 @@ func (c *collector) start() {
 				for connIter.Next(&conn) {
 					//filter out unestablished connections
 					//We expect at least SYN ACK SYN-ACK [FIN ACK FIN ACK/ RST]
-					if conn.Proto == "tcp" && conn.OriginPackets+conn.ResponsePackets <= 3 {
-						continue
-					}
+					// if conn.Proto == "tcp" && conn.OriginPackets+conn.ResponsePackets <= 3 {
+					// 	continue
+					// }
 
 					newInput.ts = append(newInput.ts, conn.Ts)
 					newInput.origIPBytes = append(newInput.origIPBytes, conn.OriginIPBytes)
