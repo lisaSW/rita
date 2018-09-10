@@ -6,11 +6,12 @@ import (
 	"github.com/activecm/rita/config"
 	"github.com/activecm/rita/database"
 	dataBeacon "github.com/activecm/rita/datatypes/beacon"
+	mgo "github.com/globalsign/mgo"
 )
 
 // start kicks off a new write thread
 func writer_start(output []*dataBeacon.BeaconAnalysisOutput, resDB *database.DB, resConf *config.Config) {
-
+	// fmt.Println("start writer")
 	// for _, data := range output {
 	// 	ssn.DB(resDB.GetSelectedDB()).C(resConf.T.Beacon.BeaconTable).Insert(data)
 	//
@@ -18,6 +19,7 @@ func writer_start(output []*dataBeacon.BeaconAnalysisOutput, resDB *database.DB,
 
 	// buffer length controls amount of ram used while exporting
 	bufferLen := resConf.S.Bro.ImportBuffer
+	// bufferLen := 10
 
 	//Create a buffer to hold a portion of the results
 	buffer := make([]interface{}, 0, bufferLen)
@@ -31,7 +33,7 @@ func writer_start(output []*dataBeacon.BeaconAnalysisOutput, resDB *database.DB,
 
 			err := bulk_write(buffer, resDB, resConf)
 			if err != nil && err.Error() != "invalid BulkError instance: no errors" {
-				fmt.Println(err)
+				fmt.Println("write error 1", err)
 			}
 
 			buffer = buffer[:0]
@@ -41,9 +43,11 @@ func writer_start(output []*dataBeacon.BeaconAnalysisOutput, resDB *database.DB,
 	}
 
 	//send any data left in the buffer to the remote database
+	//
 	err := bulk_write(buffer, resDB, resConf)
 	if err != nil && err.Error() != "invalid BulkError instance: no errors" {
-		fmt.Println(err)
+		fmt.Println(buffer)
+		fmt.Println("write error 2", err)
 	}
 
 }
@@ -65,4 +69,48 @@ func bulk_write(buffer []interface{}, resDB *database.DB, resConf *config.Config
 
 	return err
 
+}
+
+// start kicks off a new write thread
+func writer_start_non_bulk(output []*dataBeacon.BeaconAnalysisOutput, resDB *database.DB, resConf *config.Config) int {
+	// fmt.Println("writing:", len(output))
+	ssn := resDB.Session.Copy()
+	defer ssn.Close()
+
+	// var noErr []*dataBeacon.BeaconAnalysisOutput
+	counter := 0
+	for _, data := range output {
+		err := ssn.DB(resDB.GetSelectedDB()).C(resConf.T.Beacon.BeaconTable).Insert(data)
+
+		if err != nil {
+			if mgo.IsDup(err) {
+				// Is a duplicate key, but we don't know which one
+				fmt.Println("write error duplicate flag", err)
+			} else {
+				fmt.Println("write error other", err)
+			}
+
+			fmt.Println("data", data)
+			// Is another error
+		} else {
+			counter++
+			// noErr = append(noErr, data)
+		}
+
+	}
+
+	// fmt.Println("==============================================================")
+	// fmt.Println("==============================================================")
+	// fmt.Println("==============================================================")
+	// fmt.Println("==============================================================")
+	// fmt.Println("===                  writing success                       ===")
+	// fmt.Println("==============================================================")
+	// fmt.Println("==============================================================")
+	// fmt.Println("==============================================================")
+	// fmt.Println("==============================================================")
+	// fmt.Println("wrote:", counter)
+	// fmt.Println("==============================================================")
+	// fmt.Println("==============================================================")
+	// fmt.Println(noErr)
+	return counter
 }

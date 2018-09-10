@@ -8,11 +8,11 @@ import (
 )
 
 type MyFunction interface {
-	GreetChunk([]*BeaconAnalysisInput, int64, int64, int) []*dataBeacon.BeaconAnalysisOutput
-	Greet(*BeaconAnalysisInput, int64, int64, int) *dataBeacon.BeaconAnalysisOutput
+	GreetChunk([]BeaconAnalysisInput, int64, int64, int) []*dataBeacon.BeaconAnalysisOutput
+	Greet(BeaconAnalysisInput, int64, int64, int) *dataBeacon.BeaconAnalysisOutput
 }
 
-func test(data []*BeaconAnalysisInput, minTime int64, maxTime int64, thresh int) []*dataBeacon.BeaconAnalysisOutput {
+func test(data []BeaconAnalysisInput, minTime int64, maxTime int64, thresh int) []*dataBeacon.BeaconAnalysisOutput {
 	// fmt.Println(data)
 	var mod string
 	mod = "../RITA-Labs/beacons/beacons.so"
@@ -47,7 +47,8 @@ func test(data []*BeaconAnalysisInput, minTime int64, maxTime int64, thresh int)
 }
 
 // start kicks off a new analysis thread
-func analyzer_start(dataChunk []*BeaconAnalysisInput, minTime int64, maxTime int64, thresh int) []*dataBeacon.BeaconAnalysisOutput {
+func analyzer_start(dataChunk []BeaconAnalysisInput, minTime int64, maxTime int64, thresh int) []*dataBeacon.BeaconAnalysisOutput {
+	// fmt.Println("start analyzer", len(dataChunk))
 	var outputChunk []*dataBeacon.BeaconAnalysisOutput
 	outputChunk = test(dataChunk, minTime, maxTime, thresh)
 	return outputChunk

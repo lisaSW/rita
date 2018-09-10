@@ -1,67 +1,341 @@
 package beacon
 
 import (
+	"fmt"
+
 	"github.com/activecm/rita/config"
 	"github.com/activecm/rita/database"
-	"github.com/activecm/rita/datatypes/data"
-	"github.com/activecm/rita/datatypes/structure"
 	"github.com/globalsign/mgo/bson"
 )
 
-func collector_start(resDB *database.DB, resConf *config.Config, thresh int) []*BeaconAnalysisInput {
-
-	var inputList []*BeaconAnalysisInput
-
+func collector_start(resDB *database.DB, resConf *config.Config, thresh int, page int, pageSize int) []BeaconAnalysisInput {
+	// fmt.Println("start collector:", page)
 	session := resDB.Session.Copy()
 	defer session.Close()
 
-	//grab all destinations related with this host
-	var uconn structure.UniqueConnection
-	// destIter := session.DB(c.db.GetSelectedDB()).
-	localHostIter := session.DB(resDB.GetSelectedDB()).
-		// C(c.conf.T.Structure.UniqueConnTable).
-		C(resConf.T.Structure.UniqueConnTable).
-		Find(bson.M{"local_src": true}).Iter()
+	skip := page * pageSize
+	limit := pageSize
+	// fmt.Println("skip: ", skip, "  limit: ", limit)
 
-	for localHostIter.Next(&uconn) {
-		//skip the connection pair if they are under the threshold
-		if uconn.ConnectionCount < thresh {
-			continue
-		}
-
-		//create our new input
-		newInput := &BeaconAnalysisInput{
-			UconnID: uconn.ID,
-			src:     uconn.Src,
-			dst:     uconn.Dst,
-		}
-
-		//Grab connection data
-		var conn data.Conn
-		connIter := session.DB(resDB.GetSelectedDB()).
-			C(resConf.T.Structure.ConnTable).
-			Find(bson.M{"id_orig_h": uconn.Src, "id_resp_h": uconn.Dst}).
-			Iter()
-
-		for connIter.Next(&conn) {
-			//filter out unestablished connections
-			//We expect at least SYN ACK SYN-ACK [FIN ACK FIN ACK/ RST]
-			if conn.Proto == "tcp" && conn.OriginPackets+conn.ResponsePackets <= 3 {
-				continue
-			}
-
-			newInput.Ts = append(newInput.Ts, conn.Ts)
-			newInput.OrigIPBytes = append(newInput.OrigIPBytes, conn.OriginIPBytes)
-		}
-
-		//filtering may have reduced the amount of connections
-		//check again if we should skip this unique connection
-		if len(newInput.Ts) < thresh {
-			continue
-		}
-
-		inputList = append(inputList, newInput)
+	beaconsQuery := []bson.D{
+		{
+			{"$match", bson.D{
+				{"local_src", true},
+				{"connection_count", bson.D{
+					{"$gt", 4},
+					{"$lt", 500000},
+				}},
+			}},
+		},
+		// {
+		// 	{"$sort", bson.D{
+		// 		{"connection_count", -1},
+		// 	}},
+		// },
+		{
+			{"$skip", skip},
+		},
+		{
+			{"$limit", limit},
+		},
+		{
+			{"$lookup", bson.D{
+				{"from", resConf.T.Structure.ConnTable},
+				{"let", bson.D{
+					{"matchSrc", "$src"},
+					{"matchDst", "$dst"},
+				}},
+				{"pipeline", []interface{}{
+					bson.D{{"$match", bson.D{
+						{"$expr", bson.D{
+							{"$and", []interface{}{
+								bson.D{{"$eq", []interface{}{"$id_orig_h", "$$matchSrc"}}},
+								bson.D{{"$eq", []interface{}{"$id_resp_h", "$$matchDst"}}},
+							}},
+						}},
+					}}},
+				}},
+				{"as", "result"},
+			}},
+		},
+		{
+			{"$unwind", "$result"},
+		},
+		{
+			{"$group", bson.D{
+				{"_id", "$_id"},
+				{"src", bson.D{{"$first", "$src"}}},
+				{"dst", bson.D{{"$first", "$dst"}}},
+				{"ts", bson.D{{"$push", "$result.ts"}}},
+				{"orig_ip_bytes", bson.D{{"$push", "$result.orig_ip_bytes"}}},
+			}},
+		},
+		// {
+		// 	{"$project", bson.D{
+		// 		// {"id", "$_id"},
+		// 		{"src", 1},
+		// 		{"dst", 1},
+		// 		{"uconn_id", "$_id"},
+		// 		{"ts", "$result.ts"},
+		// 		{"orig_ip_bytes", "$result.orig_ip_bytes"},
+		// 	}},
+		// },
 	}
 
+	/******** ERROR CHECKING  ******/
+	var m bson.M
+	err := session.DB(resDB.GetSelectedDB()).
+		C(resConf.T.Structure.UniqueConnTable).
+		Pipe(beaconsQuery).
+		Explain(&m)
+	if err == nil {
+		// fmt.Printf("Explain: %#v\n", m)
+	} else {
+		fmt.Println("Error", err)
+	}
+	/*******************************/
+
+	/******** ERROR CHECKING  ******/
+	// var temprez interface{}
+	// countz := session.DB(resDB.GetSelectedDB()).
+	// 	C(resConf.T.Structure.UniqueConnTable).
+	// 	Pipe(beaconsQuery).
+	//
+	// fmt.Println("aggregation count", countz)
+
+	/*******************************/
+
+	iterBeacons := session.DB(resDB.GetSelectedDB()).
+		C(resConf.T.Structure.UniqueConnTable).
+		Pipe(beaconsQuery).
+		Iter()
+
+	var res BeaconAnalysisInput
+	// var res interface{}
+	var inputList []BeaconAnalysisInput
+	for iterBeacons.Next(&res) {
+
+		// if len(res.Ts) < thresh {
+		// 	continue
+		// }
+		// fmt.Println(res.UconnID)
+
+		inputList = append(inputList, res)
+	}
+	// fmt.Println(inputList)
 	return inputList
 }
+
+// db.getCollection('uconn').aggregate([
+//     {$match: {local_src:true}},
+//     {$skip: 0},
+//     {$limit: 10},
+//     {
+//         $lookup:
+//         {
+//             from: "conn",
+//             localField: "src",
+//             foreignField: "id_orig_h",
+//             as: "conn"
+//         }
+//     },
+//     {$unwind: "$conn"},
+//     //redact...
+//
+//     {$match: {$expr: {$eq: ["$conn.id_resp_h","$dst"]}}},
+//     {$group: {_id: {"src":"$src","dst":"$dst"}, "ts": {$push: "$conn.ts"}, "orig_ip_bytes":{$push: "$conn.orig_ip_bytes"}}}
+// ])
+
+// db.getCollection('uconn').aggregate([
+// {$match: {local_src:true}},
+// {$skip: 0},
+// {$limit: 10},
+// {
+//     "$lookup": {
+//                     "from": "conn",
+//                     "localField": "src",
+//                     "foreignField": "id_orig_h",
+//                     "as": "c2"
+//                     }
+// },
+// {
+//     "$unwind": "$c2"
+// },
+// {
+//     "$project": {
+//                     "user2Eq": {"$eq": ["$dst", "$c2.id_resp_h"]},
+//                     "src": 1, "dst": 1,
+//                     "percent1": "$c2.id_orig_h", "percent2": "$c2.id_resp_h"
+//                     }
+// },
+// {
+//     "$match": {
+//         "user2Eq": {"$eq": true},
+//               }
+// },
+// {"$project":
+//     {
+//       "user2Eq": 0
+//     }
+// }
+// ])
+
+// db.getCollection('uconn').aggregate([
+//        {
+//           $lookup: {
+//              from: "conn",
+//              let: {
+//                 matchSrc: "$src",
+//                 matchDst: "$dst"
+//              },
+//              pipeline: [
+//                 {
+//                    $match: {
+//                       $expr: {
+//                          $and: [
+//                             {
+//                                $eq: [
+//                                   "$id_orig_h",
+//                                   "$$matchSrc"
+//                                ]
+//                             },
+//                             {
+//                                $eq: [
+//                                   "$id_resp_h",
+//                                   "$$matchDst"
+//                                ]
+//                             }
+//                          ]
+//                       }
+//                    }
+//                 }
+// //                 { $project: { stock_item: 0, _id: 0 } }
+//
+//              ],
+//              as: "result"
+//           }
+//        }
+// //        {
+// //           $replaceRoot: {
+// //              newRoot: {
+// //                 $mergeObjects:[
+// //                    {
+// //                       $arrayElemAt: [
+// //                          "$result",
+// //                          0
+// //                       ]
+// //                    },
+// //                    {
+// //                       percent1: "$$ROOT.src"
+// //                    }
+// //                 ]
+// //              }
+// //           }
+// //        }
+//
+//     ]
+// )
+
+// db.getCollection('uconn').aggregate([
+//     {$match: {local_src:true,connection_count: {$gt:5}}},
+//     {$skip: 0},
+//     {$limit: 10},
+//        {
+//           $lookup: {
+//              from: "conn",
+//              let: {
+//                 matchSrc: "$src",
+//                 matchDst: "$dst"
+//              },
+//              pipeline: [
+//                 {
+//                    $match: {
+//                       $expr: {
+//                          $and: [
+//                             {
+//                                $eq: [
+//                                   "$id_orig_h",
+//                                   "$$matchSrc"
+//                                ]
+//                             },
+//                             {
+//                                $eq: [
+//                                   "$id_resp_h",
+//                                   "$$matchDst"
+//                                ]
+//                             }
+//                          ]
+//                       }
+//                    }
+//                 }
+// //                 { $project: { stock_item: 0, _id: 0 } }
+//
+//              ],
+//              as: "result"
+//           }
+//        },
+//        { "$project": {
+//         "src": 1,
+//         "dst": 1,
+//         "result": {
+//             "$map": {
+//                 "input": "$result",
+//                 "as": "r",
+//                 "in": {
+//                     "ts": "$$r.ts",
+//                     "orig_ip_bytes": "$$r.orig_ip_bytes"
+//                     }
+//                 }
+//             }
+//         }}
+//
+//     ]
+// )
+
+//
+// db.getCollection('uconn').aggregate([
+//     {$match: {local_src:true,connection_count: {$gt:5}}},
+//     {$skip: 0},
+//     {$limit: 10},
+//        {
+//           $lookup: {
+//              from: "conn",
+//              let: {
+//                 matchSrc: "$src",
+//                 matchDst: "$dst"
+//              },
+//              pipeline: [
+//                 {
+//                    $match: {
+//                       $expr: {
+//                          $and: [
+//                             {
+//                                $eq: [
+//                                   "$id_orig_h",
+//                                   "$$matchSrc"
+//                                ]
+//                             },
+//                             {
+//                                $eq: [
+//                                   "$id_resp_h",
+//                                   "$$matchDst"
+//                                ]
+//                             }
+//                          ]
+//                       }
+//                    }
+//                 }
+//              ],
+//              as: "result"
+//           }
+//        },
+//        {"$unwind": "$result"},
+//        { "$group": {
+//            "_id": "$_id",
+//             "src": {"$first": "$src"},
+//             "dst": {"$first": "$dst"},
+// 	"ts": {"$push": "$result.ts"},
+// 	"orig_ip_bytes": {"$push": "$result.orig_ip_bytes"},
+//         }}
+//     ]
+// )

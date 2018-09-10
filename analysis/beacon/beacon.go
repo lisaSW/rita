@@ -1,6 +1,7 @@
 package beacon
 
 import (
+	"math"
 	"time"
 
 	mgo "github.com/globalsign/mgo"
@@ -16,11 +17,11 @@ import (
 type (
 	//beaconAnalysisInput binds a src, dst pair with their analysis data
 	BeaconAnalysisInput struct {
-		src         string        // Source IP
-		dst         string        // Destination IP
-		UconnID     bson.ObjectId // Unique Connection ID
-		Ts          []int64       // Connection timestamps for this src, dst pair
-		OrigIPBytes []int64       // Src to dst connection sizes for each connection
+		src         string        `bson:"src"`           // Source IP
+		dst         string        `bson:"dst"`           // Destination IP
+		UconnID     bson.ObjectId `bson:"_id"`           // Unique Connection ID
+		Ts          []int64       `bson:"ts"`            // Connection timestamps for this src, dst pair
+		OrigIPBytes []int64       `bson:"orig_ip_bytes"` // Src to dst connection sizes for each connection
 	}
 )
 
@@ -57,11 +58,98 @@ func BuildBeaconCollection(res *resources.Resources) {
 		res.Log,
 	)
 
-	tempy := collector_start(res.DB, res.Config, thresh)
+	// Get number of local hosts
 
-	outputChunk := analyzer_start(tempy, minTime, maxTime, thresh)
+	localHostCount, _ := res.DB.Session.DB(res.DB.GetSelectedDB()).
+		C(res.Config.T.Structure.UniqueConnTable).
+		Find(bson.M{"local_src": true, "connection_count": bson.M{"$gt": 4, "$lt": 500000}}).
+		Count()
 
-	writer_start(outputChunk, res.DB, res.Config)
+	// localHostCount := session.DB(res.DB.GetSelectedDB()).
+	// 	// C(c.conf.T.Structure.UniqueConnTable).
+	// 	C(res.Config.T.Structure.UniqueConnTable).
+	// 	Find(bson.M{"local_src": true}).Count()
+
+	limit := 300
+	pages := int(math.Ceil(float64(localHostCount) / float64(limit)))
+	// fmt.Println("hostcount:", localHostCount)
+	// fmt.Println("pages:", pages)
+	// fmt.Println("limit:", limit)
+	// fmt.Println("pages:", pages)
+
+	// collectedCounter := 0
+	// analyzedCounter := 0
+	// writeCounter := 0
+	// var tempy []BeaconAnalysisInput
+	for i := 0; i < pages; i++ {
+
+		t := collector_start(res.DB, res.Config, thresh, i, limit)
+		// collectedCounter += len(t)
+		// if len(t) != limit {
+		// 	fmt.Println("page: ", i, "  returned: ", len(t))
+		// }
+
+		outputChunk := analyzer_start(t, minTime, maxTime, thresh)
+		// analyzedCounter += len(outputChunk)
+
+		writer_start(outputChunk, res.DB, res.Config)
+		// writeCounter += writer_start_non_bulk(outputChunk, res.DB, res.Config)
+
+	}
+
+	// fmt.Println("collected:", collectedCounter)
+	// fmt.Println("analyzed:", analyzedCounter)
+	// fmt.Println("wrote:", writeCounter)
+
+	// tempy := collector_start(res.DB, res.Config, thresh, 0, limit)
+	// fmt.Println("collected:", len(tempy))
+
+	// fmt.Println("==============================================================")
+	// fmt.Println("==============================================================")
+	// fmt.Println("==============================================================")
+	// fmt.Println("==============================================================")
+	// fmt.Println("===              input after aggregation                   ===")
+	// fmt.Println("==============================================================")
+	// fmt.Println("==============================================================")
+	// fmt.Println("==============================================================")
+	// fmt.Println("==============================================================")
+	// for _, p := range tempy {
+	// 	fmt.Println(p.UconnID)
+	// }
+	// fmt.Println("==============================================================")
+	// fmt.Println("==============================================================")
+	// fmt.Println("==============================================================")
+	// fmt.Println("==============================================================")
+	//
+	// outputChunk := analyzer_start(tempy, minTime, maxTime, thresh)
+	// fmt.Println("analyzed:", len(outputChunk))
+
+	// fmt.Println("==============================================================")
+	// fmt.Println("==============================================================")
+	// fmt.Println("==============================================================")
+	// fmt.Println("==============================================================")
+	// fmt.Println("===                     output chunk                       ===")
+	// fmt.Println("==============================================================")
+	// fmt.Println("==============================================================")
+	// fmt.Println("==============================================================")
+	// fmt.Println("==============================================================")
+
+	// for _, p := range outputChunk {
+	// 	fmt.Println(p.UconnID)
+	// }
+	//
+	// fmt.Println("==============================================================")
+	// fmt.Println("==============================================================")
+	// fmt.Println("==============================================================")
+	// fmt.Println("==============================================================")
+	// fmt.Println("===                   writing erorrs                       ===")
+	// fmt.Println("==============================================================")
+	// fmt.Println("==============================================================")
+	// fmt.Println("==============================================================")
+	// fmt.Println("==============================================================")
+	//
+	// // writer_start(outputChunk, res.DB, res.Config)
+	// writer_start_non_bulk(outputChunk, res.DB, res.Config)
 
 }
 
