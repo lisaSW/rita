@@ -10,7 +10,7 @@ import (
 )
 
 // start kicks off a new write thread
-func writer_start(output []*dataBeacon.BeaconAnalysisOutput, resDB *database.DB, resConf *config.Config) {
+func writer_start(output []*dataBeacon.AnalysisOutput, resDB *database.DB, resConf *config.Config) {
 	// fmt.Println("start writer")
 	// for _, data := range output {
 	// 	ssn.DB(resDB.GetSelectedDB()).C(resConf.T.Beacon.BeaconTable).Insert(data)
@@ -72,7 +72,7 @@ func bulk_write(buffer []interface{}, resDB *database.DB, resConf *config.Config
 }
 
 // start kicks off a new write thread
-func writer_start_non_bulk(output []*dataBeacon.BeaconAnalysisOutput, resDB *database.DB, resConf *config.Config) int {
+func writer_start_non_bulk(output []*dataBeacon.AnalysisOutput, resDB *database.DB, resConf *config.Config) int {
 	// fmt.Println("writing:", len(output))
 	ssn := resDB.Session.Copy()
 	defer ssn.Close()
