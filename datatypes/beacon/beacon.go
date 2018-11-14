@@ -7,6 +7,10 @@ import (
 type (
 	//AnalysisOutput contains the summary statistics of a unique connection
 	AnalysisOutput struct {
+		Src              string        `bson:"src"`
+		Dst              string        `bson:"dst"`
+		LocalSrc         bool          `bson:"local_src"`
+		LocalDst         bool          `bson:"local_dst"`
 		UconnID          bson.ObjectId `bson:"uconn_id"`
 		TSIRange         int64         `bson:"ts_iRange"`
 		TSIMode          int64         `bson:"ts_iMode"`

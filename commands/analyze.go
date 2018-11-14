@@ -9,7 +9,6 @@ import (
 	"github.com/activecm/rita/analysis/structure"
 	"github.com/activecm/rita/resources"
 	"github.com/activecm/rita/util"
-	"github.com/blang/semver"
 	log "github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 )
@@ -67,19 +66,19 @@ func analyze(inDb string, configFile string) error {
 			fmt.Println(errStr)
 			continue
 		}
-		semVer, err := semver.ParseTolerant(info.ImportVersion)
-		if err != nil {
-			errStr := fmt.Sprintf("Error: %s is labelled with an incorrect version tag", possDB)
-			res.Log.Errorf(errStr)
-			fmt.Println(errStr)
-			continue
-		}
-		if semVer.Major != res.Config.R.Version.Major {
-			errStr := fmt.Sprintf("Error: %s was parsed by an incompatible version of RITA", possDB)
-			res.Log.Errorf(errStr)
-			fmt.Println(errStr)
-			continue
-		}
+		// semVer, err := semver.ParseTolerant(info.ImportVersion)
+		// if err != nil {
+		// 	errStr := fmt.Sprintf("Error: %s is labelled with an incorrect version tag", possDB)
+		// 	res.Log.Errorf(errStr)
+		// 	fmt.Println(errStr)
+		// 	continue
+		// }
+		// if semVer.Major != res.Config.R.Version.Major {
+		// 	errStr := fmt.Sprintf("Error: %s was parsed by an incompatible version of RITA", possDB)
+		// 	res.Log.Errorf(errStr)
+		// 	fmt.Println(errStr)
+		// 	continue
+		// }
 		toRun = append(toRun, possDB)
 	}
 

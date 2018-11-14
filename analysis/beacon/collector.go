@@ -5,10 +5,11 @@ import (
 
 	"github.com/activecm/rita/config"
 	"github.com/activecm/rita/database"
+	"github.com/activecm/rita/datatypes/structure"
 	"github.com/globalsign/mgo/bson"
 )
 
-func collector_start(resDB *database.DB, resConf *config.Config, thresh int, page int, pageSize int) []BeaconAnalysisInput {
+func collector_start(resDB *database.DB, resConf *config.Config, page int, pageSize int) (inputList []structure.UniqueConnection) {
 	// fmt.Println("start collector:", page)
 	session := resDB.Session.Copy()
 	defer session.Close()
@@ -21,9 +22,12 @@ func collector_start(resDB *database.DB, resConf *config.Config, thresh int, pag
 		{
 			{"$match", bson.D{
 				{"local_src", true},
+				// {"local_dst", false},
 				{"connection_count", bson.D{
-					{"$gt", 4},
-					{"$lt", 500000},
+					{"$gt", 47},
+				}},
+				{"connection_count", bson.D{
+					{"$lt", 150000},
 				}},
 			}},
 		},
@@ -38,61 +42,19 @@ func collector_start(resDB *database.DB, resConf *config.Config, thresh int, pag
 		{
 			{"$limit", limit},
 		},
-		{
-			{"$lookup", bson.D{
-				{"from", resConf.T.Structure.ConnTable},
-				{"let", bson.D{
-					{"matchSrc", "$src"},
-					{"matchDst", "$dst"},
-				}},
-				{"pipeline", []interface{}{
-					bson.D{{"$match", bson.D{
-						{"$expr", bson.D{
-							{"$and", []interface{}{
-								bson.D{{"$eq", []interface{}{"$id_orig_h", "$$matchSrc"}}},
-								bson.D{{"$eq", []interface{}{"$id_resp_h", "$$matchDst"}}},
-							}},
-						}},
-					}}},
-				}},
-				{"as", "result"},
-			}},
-		},
-		{
-			{"$unwind", "$result"},
-		},
-		{
-			{"$group", bson.D{
-				{"_id", "$_id"},
-				{"src", bson.D{{"$first", "$src"}}},
-				{"dst", bson.D{{"$first", "$dst"}}},
-				{"ts", bson.D{{"$push", "$result.ts"}}},
-				{"orig_ip_bytes", bson.D{{"$push", "$result.orig_ip_bytes"}}},
-			}},
-		},
-		// {
-		// 	{"$project", bson.D{
-		// 		// {"id", "$_id"},
-		// 		{"src", 1},
-		// 		{"dst", 1},
-		// 		{"uconn_id", "$_id"},
-		// 		{"ts", "$result.ts"},
-		// 		{"orig_ip_bytes", "$result.orig_ip_bytes"},
-		// 	}},
-		// },
 	}
 
 	/******** ERROR CHECKING  ******/
-	var m bson.M
-	err := session.DB(resDB.GetSelectedDB()).
-		C(resConf.T.Structure.UniqueConnTable).
-		Pipe(beaconsQuery).
-		Explain(&m)
-	if err == nil {
-		// fmt.Printf("Explain: %#v\n", m)
-	} else {
-		fmt.Println("Error", err)
-	}
+	// var m bson.M
+	// err := session.DB(resDB.GetSelectedDB()).
+	// 	C(resConf.T.Structure.UniqueConnTable).
+	// 	Pipe(beaconsQuery).AllowDiskUse().
+	// 	Explain(&m)
+	// if err == nil {
+	// 	// fmt.Printf("Explain: %#v\n", m)
+	// } else {
+	// 	fmt.Println("Error", err)
+	// }
 	/*******************************/
 
 	/******** ERROR CHECKING  ******/
@@ -105,24 +67,17 @@ func collector_start(resDB *database.DB, resConf *config.Config, thresh int, pag
 
 	/*******************************/
 
-	iterBeacons := session.DB(resDB.GetSelectedDB()).
+	err := session.DB(resDB.GetSelectedDB()).
 		C(resConf.T.Structure.UniqueConnTable).
-		Pipe(beaconsQuery).
-		Iter()
+		Pipe(beaconsQuery).AllowDiskUse().
+		All(&inputList)
 
-	var res BeaconAnalysisInput
-	// var res interface{}
-	var inputList []BeaconAnalysisInput
-	for iterBeacons.Next(&res) {
-
-		// if len(res.Ts) < thresh {
-		// 	continue
-		// }
-		// fmt.Println(res.UconnID)
-
-		inputList = append(inputList, res)
+	// Check for errors and parse results
+	if err != nil {
+		fmt.Printf("Error beacons ", err)
+		return
 	}
-	// fmt.Println(inputList)
+
 	return inputList
 }
 

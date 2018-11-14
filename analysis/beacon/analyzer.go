@@ -5,14 +5,15 @@ import (
 	"plugin"
 
 	dataBeacon "github.com/activecm/rita/datatypes/beacon"
+	"github.com/activecm/rita/datatypes/structure"
 )
 
 type MyFunction interface {
-	GreetChunk([]BeaconAnalysisInput, int64, int64, int) []*dataBeacon.AnalysisOutput
-	Greet(BeaconAnalysisInput, int64, int64, int) *dataBeacon.AnalysisOutput
+	GreetChunk([]structure.UniqueConnection, int64, int64, int) []*dataBeacon.AnalysisOutput
+	Greet(structure.UniqueConnection, int64, int64, int) *dataBeacon.AnalysisOutput
 }
 
-func test(data []BeaconAnalysisInput, minTime int64, maxTime int64, thresh int) []*dataBeacon.AnalysisOutput {
+func test(data []structure.UniqueConnection, minTime int64, maxTime int64, thresh int) []*dataBeacon.AnalysisOutput {
 	// fmt.Println(data)
 	var mod string
 	mod = "../RITA-Labs/beacons/beacons.so"
@@ -47,7 +48,7 @@ func test(data []BeaconAnalysisInput, minTime int64, maxTime int64, thresh int) 
 }
 
 // start kicks off a new analysis thread
-func analyzer_start(dataChunk []BeaconAnalysisInput, minTime int64, maxTime int64, thresh int) []*dataBeacon.AnalysisOutput {
+func analyzer_start(dataChunk []structure.UniqueConnection, minTime int64, maxTime int64, thresh int) []*dataBeacon.AnalysisOutput {
 	// fmt.Println("start analyzer", len(dataChunk))
 	var outputChunk []*dataBeacon.AnalysisOutput
 	outputChunk = test(dataChunk, minTime, maxTime, thresh)

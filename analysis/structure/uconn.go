@@ -67,27 +67,33 @@ func getUniqueConnectionsScript(conf *config.Config) (string, string, []mgo.Inde
 	// nolint: vet
 	pipeline := []bson.D{
 		{
+			{"$match", bson.M{
+				"$or": []bson.M{
+					bson.M{
+						"$and": []bson.M{
+							bson.M{"local_orig": true},
+							bson.M{"local_resp": false},
+						}},
+					bson.M{
+						"$and": []bson.M{
+							bson.M{"local_orig": false},
+							bson.M{"local_resp": true},
+						}},
+				}},
+			},
+		},
+		{
 			{"$group", bson.D{
 				{"_id", bson.D{
 					{"src", "$id_orig_h"},
 					{"dst", "$id_resp_h"},
+					{"ls", "$local_orig"},
+					{"ld", "$local_resp"},
 				}},
-				{"connection_count", bson.D{
+				{"conns", bson.D{
 					{"$sum", 1},
 				}},
-				{"src", bson.D{
-					{"$first", "$id_orig_h"},
-				}},
-				{"dst", bson.D{
-					{"$first", "$id_resp_h"},
-				}},
-				{"local_src", bson.D{
-					{"$first", "$local_orig"},
-				}},
-				{"local_dst", bson.D{
-					{"$first", "$local_resp"},
-				}},
-				{"total_bytes", bson.D{
+				{"tbytes", bson.D{
 					{"$sum", bson.D{
 						{"$add", []interface{}{
 							"$orig_ip_bytes",
@@ -95,7 +101,7 @@ func getUniqueConnectionsScript(conf *config.Config) (string, string, []mgo.Inde
 						}},
 					}},
 				}},
-				{"avg_bytes", bson.D{
+				{"abytes", bson.D{
 					{"$avg", bson.D{
 						{"$add", []interface{}{
 							"$orig_ip_bytes",
@@ -103,22 +109,26 @@ func getUniqueConnectionsScript(conf *config.Config) (string, string, []mgo.Inde
 						}},
 					}},
 				}},
-				{"total_duration", bson.D{
+				{"tdur", bson.D{
 					{"$sum", "$duration"},
 				}},
+				{"ts", bson.D{{"$push", "$ts"}}},
+				{"orig_bytes", bson.D{{"$push", "$orig_ip_bytes"}}},
 			}},
 		},
 		{
 			{"$project", bson.D{
 				{"_id", 0},
-				{"connection_count", 1},
-				{"src", 1},
-				{"dst", 1},
-				{"local_src", 1},
-				{"local_dst", 1},
-				{"total_bytes", 1},
-				{"avg_bytes", 1},
-				{"total_duration", 1},
+				{"connection_count", "$conns"},
+				{"src", "$_id.src"},
+				{"dst", "$_id.dst"},
+				{"local_src", "$_id.ls"},
+				{"local_dst", "$_id.ld"},
+				{"total_bytes", "$tbytes"},
+				{"avg_bytes", "$abytes"},
+				{"total_duration", "$tdur"},
+				{"ts_list", "$ts"},
+				{"orig_bytes_list", "$orig_bytes"},
 			}},
 		},
 		{

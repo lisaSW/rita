@@ -17,8 +17,10 @@ import (
 type (
 	//beaconAnalysisInput binds a src, dst pair with their analysis data
 	BeaconAnalysisInput struct {
-		src         string        `bson:"src"`           // Source IP
-		dst         string        `bson:"dst"`           // Destination IP
+		Src         string        `bson:"src"`           // Source IP
+		Dst         string        `bson:"dst"`           // Destination IP
+		LocalSrc    bool          `bson:"local_src"`     // local src bool
+		LocalDst    bool          `bson:"local_dst"`     // local dst bool
 		UconnID     bson.ObjectId `bson:"_id"`           // Unique Connection ID
 		Ts          []int64       `bson:"ts"`            // Connection timestamps for this src, dst pair
 		OrigIPBytes []int64       `bson:"orig_ip_bytes"` // Src to dst connection sizes for each connection
@@ -62,38 +64,19 @@ func BuildBeaconCollection(res *resources.Resources) {
 
 	localHostCount, _ := res.DB.Session.DB(res.DB.GetSelectedDB()).
 		C(res.Config.T.Structure.UniqueConnTable).
-		Find(bson.M{"local_src": true, "connection_count": bson.M{"$gt": 4, "$lt": 500000}}).
+		Find(bson.M{"local_src": true, "connection_count": bson.M{"$gt": 47, "$lt": 150000}}).
 		Count()
-
-	// localHostCount := session.DB(res.DB.GetSelectedDB()).
-	// 	// C(c.conf.T.Structure.UniqueConnTable).
-	// 	C(res.Config.T.Structure.UniqueConnTable).
-	// 	Find(bson.M{"local_src": true}).Count()
 
 	limit := 300
 	pages := int(math.Ceil(float64(localHostCount) / float64(limit)))
-	// fmt.Println("hostcount:", localHostCount)
-	// fmt.Println("pages:", pages)
-	// fmt.Println("limit:", limit)
-	// fmt.Println("pages:", pages)
 
-	// collectedCounter := 0
-	// analyzedCounter := 0
-	// writeCounter := 0
-	// var tempy []BeaconAnalysisInput
 	for i := 0; i < pages; i++ {
 
-		t := collector_start(res.DB, res.Config, thresh, i, limit)
-		// collectedCounter += len(t)
-		// if len(t) != limit {
-		// 	fmt.Println("page: ", i, "  returned: ", len(t))
-		// }
+		t := collector_start(res.DB, res.Config, i, limit)
 
 		outputChunk := analyzer_start(t, minTime, maxTime, thresh)
-		// analyzedCounter += len(outputChunk)
 
 		writer_start(outputChunk, res.DB, res.Config)
-		// writeCounter += writer_start_non_bulk(outputChunk, res.DB, res.Config)
 
 	}
 
