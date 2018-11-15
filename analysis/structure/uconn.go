@@ -67,19 +67,12 @@ func getUniqueConnectionsScript(conf *config.Config) (string, string, []mgo.Inde
 	// nolint: vet
 	pipeline := []bson.D{
 		{
-			{"$match", bson.M{
-				"$or": []bson.M{
-					bson.M{
-						"$and": []bson.M{
-							bson.M{"local_orig": true},
-							bson.M{"local_resp": false},
-						}},
-					bson.M{
-						"$and": []bson.M{
-							bson.M{"local_orig": false},
-							bson.M{"local_resp": true},
-						}},
-				}},
+			{"$match",
+				bson.M{
+					"$and": []bson.M{
+						bson.M{"local_orig": true},
+						bson.M{"local_resp": false},
+					}},
 			},
 		},
 		{

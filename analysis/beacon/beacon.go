@@ -47,10 +47,10 @@ func BuildBeaconCollection(res *resources.Resources) {
 	// If the threshold is incorrectly specified, fix it up.
 	// We require at least four delta times to analyze
 	// (Q1, Q2, Q3, Q4). So we need at least 5 connections
-	thresh := res.Config.S.Beacon.DefaultConnectionThresh
-	if thresh < 5 {
-		thresh = 5
-	}
+	// thresh := res.Config.S.Beacon.DefaultConnectionThresh
+	// if thresh < 5 {
+	// 	thresh = 5
+	// }
 
 	//Find the observation period (returns the min and max timestamps for
 	// for all connections)
@@ -64,7 +64,7 @@ func BuildBeaconCollection(res *resources.Resources) {
 
 	localHostCount, _ := res.DB.Session.DB(res.DB.GetSelectedDB()).
 		C(res.Config.T.Structure.UniqueConnTable).
-		Find(bson.M{"local_src": true, "connection_count": bson.M{"$gt": 47, "$lt": 150000}}).
+		Find(bson.M{"connection_count": bson.M{"$gt": 45, "$lt": 150000}}).
 		Count()
 
 	limit := 300
@@ -74,7 +74,7 @@ func BuildBeaconCollection(res *resources.Resources) {
 
 		t := collector_start(res.DB, res.Config, i, limit)
 
-		outputChunk := analyzer_start(t, minTime, maxTime, thresh)
+		outputChunk := analyzer_start(t, minTime, maxTime)
 
 		writer_start(outputChunk, res.DB, res.Config)
 

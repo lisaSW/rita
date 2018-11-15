@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/activecm/rita/analysis/beacon"
-	"github.com/activecm/rita/analysis/sanitization"
 	"github.com/activecm/rita/analysis/structure"
 	"github.com/activecm/rita/resources"
 	"github.com/activecm/rita/util"
@@ -102,7 +101,7 @@ func analyze(inDb string, configFile string) error {
 		fmt.Println("[+] Analyzing " + td)
 		res.DB.SelectDB(td)
 
-		sanitization.SanitizeData(res)
+		// sanitization.SanitizeData(res)
 
 		logAnalysisFunc("Unique Connections", td, res,
 			structure.BuildUniqueConnectionsCollection,
@@ -150,6 +149,7 @@ func analyze(inDb string, configFile string) error {
 		}).Info("Analysis complete")
 	}
 	endAll := time.Now()
+	fmt.Println("Analysis Time:", time.Since(startAll))
 	res.Log.WithFields(log.Fields{
 		"end_time": endAll.Format(util.TimeFormat),
 		"duration": endAll.Sub(startAll),

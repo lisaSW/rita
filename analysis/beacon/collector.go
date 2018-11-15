@@ -21,10 +21,8 @@ func collector_start(resDB *database.DB, resConf *config.Config, page int, pageS
 	beaconsQuery := []bson.D{
 		{
 			{"$match", bson.D{
-				{"local_src", true},
-				// {"local_dst", false},
 				{"connection_count", bson.D{
-					{"$gt", 47},
+					{"$gt", 45},
 				}},
 				{"connection_count", bson.D{
 					{"$lt", 150000},
